@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -14,66 +14,138 @@
       align-items: center;
       justify-content: center;
       height: 100vh;
-      gap: 15px;
+      gap: 10px;
       font-family: system-ui, sans-serif;
     }
-    input {
-      padding: 8px;
+    video {
+      width: 300px;
+      height: 300px;
+      object-fit: cover;
+      transform: scaleX(-1);
+      display: none;
+      border: 1px solid #ccc;
+    }
+    input, button {
+      padding: 5px;
       font-size: 16px;
     }
-    #result {
-      padding: 10px;
-      font-size: 16px;
-      text-align: center;
+    #file-input {
+      width: 200px;
+    }
+    #cam-btn {
+      width: 90px;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+    }
+    .result-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       width: 300px;
+    }
+    #result {
+      flex: 1;
+      padding: 8px;
+      font-size: 14px;
+      text-align: center;
       background: #f5f5f5;
       border-radius: 4px;
       word-break: break-all;
     }
+    #copy-btn {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      background: #f5f5f5;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #copy-btn:hover {
+      background: #e0e0e0;
+    }
   </style>
 </head>
 <body>
-  <input type="file" id="file-input" accept="image/*">
-  <div id="result">result</div>
+  <div class="row">
+    <input type="file" id="file-input" accept="image/*">
+    <button id="cam-btn">camera</button>
+  </div>
+  <video id="video" autoplay playsinline muted></video>
+  <div class="result-row">
+    <div id="result">result</div>
+    <button id="copy-btn" title="copy">📋</button>
+  </div>
 
   <script>
-    window.onload = function() {
-      const fileInput = document.getElementById('file-input');
-      const resultDiv = document.getElementById('result');
+    const video = document.getElementById('video');
+    const resultDiv = document.getElementById('result');
+    const camBtn = document.getElementById('cam-btn');
+    const fileInput = document.getElementById('file-input');
+    const copyBtn = document.getElementById('copy-btn');
+    let stream = null;
 
-      fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    copyBtn.onclick = () => {
+      const text = resultDiv.textContent;
+      if (text && text !== 'result' && text !== 'no QR') {
+        navigator.clipboard.writeText(text);
+        const original = copyBtn.textContent;
+        copyBtn.textContent = '✓';
+        setTimeout(() => { copyBtn.textContent = original; }, 1000);
+      }
+    };
 
-        resultDiv.textContent = 'scanning...';
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const code = jsQR(ctx.getImageData(0, 0, img.width, img.height).data, img.width, img.height, { inversionAttempts: "attemptBoth" });
+        resultDiv.textContent = code ? code.data : 'no QR';
+        URL.revokeObjectURL(img.src);
+      };
+    };
 
-        const reader = new FileReader();
-        reader.onload = function(event) {
-          const img = new Image();
-          img.onload = function() {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, img.width, img.height);
-            const imageData = ctx.getImageData(0, 0, img.width, img.height);
-            const code = jsQR(imageData.data, img.width, img.height);
-            
-            if (code) {
-              resultDiv.textContent = code.data;
-            } else {
-              resultDiv.textContent = 'no QR found';
-            }
-          };
-          img.onerror = function() {
-            resultDiv.textContent = 'image load error';
-          };
-          img.src = event.target.result;
-        };
-        reader.onerror = function() {
-          resultDiv.textContent = 'file read error';
-        };
-        reader.readAsDataURL(file);
+    camBtn.onclick = () => {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        video.style.display = 'none';
+        stream = null;
+        camBtn.textContent = 'camera';
+        return;
+      }
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(s => {
+        stream = s;
+        video.srcObject = stream;
+        video.style.display = 'block';
+        video.play();
+        camBtn.textContent = 'stop';
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        function scan() {
+          if (!stream) return;
+          if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            const code = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: "attemptBoth" });
+            if (code) resultDiv.textContent = code.data;
+          }
+          requestAnimationFrame(scan);
+        }
+        scan();
       });
     };
   </script>
