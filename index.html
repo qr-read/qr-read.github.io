@@ -13,19 +13,12 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
+      height: 100vh;
       gap: 15px;
       font-family: system-ui, sans-serif;
     }
-    video {
-      width: 300px;
-      height: 300px;
-      object-fit: cover;
-      transform: scaleX(-1);
-      border: 1px solid #ccc;
-    }
-    button, input {
-      padding: 8px 16px;
+    input {
+      padding: 8px;
       font-size: 16px;
     }
     #result {
@@ -37,28 +30,15 @@
       border-radius: 4px;
       word-break: break-all;
     }
-    .row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
   </style>
 </head>
 <body>
-  <div class="row">
-    <input type="file" id="file-input" accept="image/*">
-    <button id="start">start camera</button>
-  </div>
-  <video id="video" autoplay playsinline muted></video>
+  <input type="file" id="file-input" accept="image/*">
   <div id="result">result</div>
 
   <script>
-    const video = document.getElementById('video');
-    const resultDiv = document.getElementById('result');
-    const startBtn = document.getElementById('start');
     const fileInput = document.getElementById('file-input');
-    let scanning = false;
+    const resultDiv = document.getElementById('result');
 
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
@@ -71,7 +51,7 @@
         canvas.width = img.width;
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, img.width, img.height);
+        ctx.drawImage(img, 0, 0);
         const imageData = ctx.getImageData(0, 0, img.width, img.height);
         const code = jsQR(imageData.data, img.width, img.height);
         
@@ -82,50 +62,6 @@
         }
         URL.revokeObjectURL(img.src);
       };
-    });
-
-    startBtn.addEventListener('click', () => {
-      if (scanning) {
-        const stream = video.srcObject;
-        if (stream) stream.getTracks().forEach(track => track.stop());
-        video.srcObject = null;
-        video.style.display = 'none';
-        scanning = false;
-        startBtn.textContent = 'start camera';
-        return;
-      }
-
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        .then(stream => {
-          video.srcObject = stream;
-          video.style.display = 'block';
-          video.play();
-          scanning = true;
-          startBtn.textContent = 'stop camera';
-          
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          
-          function tick() {
-            if (!scanning) return;
-            
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-              canvas.width = video.videoWidth;
-              canvas.height = video.videoHeight;
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-              const code = jsQR(imageData.data, canvas.width, canvas.height);
-              if (code) {
-                resultDiv.textContent = code.data;
-              }
-            }
-            requestAnimationFrame(tick);
-          }
-          
-          video.addEventListener('loadeddata', () => {
-            tick();
-          });
-        });
     });
   </script>
 </body>
