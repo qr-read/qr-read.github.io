@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 15px;
+      font-family: system-ui, sans-serif;
+    }
+    video {
+      width: 300px;
+      height: 300px;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    canvas {
+      display: none;
+    }
+    button, input {
+      padding: 8px 16px;
+      font-size: 16px;
+    }
+    #result {
+      padding: 10px;
+      font-size: 16px;
+      text-align: center;
+      width: 300px;
+      background: #f5f5f5;
+      border-radius: 4px;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <input type="file" id="file-input" accept="image/*">
+    <button id="start">start camera</button>
+  </div>
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas"></canvas>
+  <div id="result">result</div>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const resultDiv = document.getElementById('result');
+    const startBtn = document.getElementById('start');
+    const fileInput = document.getElementById('file-input');
+    let stream = null;
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, img.width, img.height);
+        const imageData = ctx.getImageData(0, 0, img.width, img.height);
+        const code = jsQR(imageData.data, img.width, img.height);
+        if (code) resultDiv.textContent = code.data;
+        URL.revokeObjectURL(img.src);
+      };
+    });
+
+    startBtn.addEventListener('click', () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        video.style.display = 'none';
+        stream = null;
+        startBtn.textContent = 'start camera';
+        return;
+      }
+
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(s => {
+          stream = s;
+          video.srcObject = stream;
+          video.style.display = 'block';
+          video.play();
+          startBtn.textContent = 'stop camera';
+          
+          function scan() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+              canvas.width = video.videoWidth;
+              canvas.height = video.videoHeight;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              const code = jsQR(imageData.data, canvas.width, canvas.height);
+              if (code) resultDiv.textContent = code.data;
+            }
+            requestAnimationFrame(scan);
+          }
+          scan();
+        });
+    });
+  </script>
+</body>
+</html>
