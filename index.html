@@ -22,9 +22,7 @@
       height: 300px;
       object-fit: cover;
       transform: scaleX(-1);
-    }
-    canvas {
-      display: none;
+      border: 1px solid #ccc;
     }
     button, input {
       padding: 8px 16px;
@@ -37,10 +35,13 @@
       width: 300px;
       background: #f5f5f5;
       border-radius: 4px;
+      word-break: break-all;
     }
     .row {
       display: flex;
       gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
     }
   </style>
 </head>
@@ -49,17 +50,15 @@
     <input type="file" id="file-input" accept="image/*">
     <button id="start">start camera</button>
   </div>
-  <video id="video" autoplay playsinline></video>
-  <canvas id="canvas"></canvas>
+  <video id="video" autoplay playsinline muted></video>
   <div id="result">result</div>
 
   <script>
     const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
     const resultDiv = document.getElementById('result');
     const startBtn = document.getElementById('start');
     const fileInput = document.getElementById('file-input');
-    let stream = null;
+    let scanning = false;
 
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
@@ -68,47 +67,64 @@
       const img = new Image();
       img.src = URL.createObjectURL(file);
       img.onload = () => {
+        const canvas = document.createElement('canvas');
         canvas.width = img.width;
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, img.width, img.height);
         const imageData = ctx.getImageData(0, 0, img.width, img.height);
         const code = jsQR(imageData.data, img.width, img.height);
-        if (code) resultDiv.textContent = code.data;
+        
+        if (code) {
+          resultDiv.textContent = code.data;
+        } else {
+          resultDiv.textContent = 'no QR found';
+        }
         URL.revokeObjectURL(img.src);
       };
     });
 
     startBtn.addEventListener('click', () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+      if (scanning) {
+        const stream = video.srcObject;
+        if (stream) stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
         video.style.display = 'none';
-        stream = null;
+        scanning = false;
         startBtn.textContent = 'start camera';
         return;
       }
 
       navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        .then(s => {
-          stream = s;
+        .then(stream => {
           video.srcObject = stream;
           video.style.display = 'block';
           video.play();
+          scanning = true;
           startBtn.textContent = 'stop camera';
           
-          function scan() {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          function tick() {
+            if (!scanning) return;
+            
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
               canvas.width = video.videoWidth;
               canvas.height = video.videoHeight;
-              const ctx = canvas.getContext('2d');
               ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
               const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
               const code = jsQR(imageData.data, canvas.width, canvas.height);
-              if (code) resultDiv.textContent = code.data;
+              if (code) {
+                resultDiv.textContent = code.data;
+              }
             }
-            requestAnimationFrame(scan);
+            requestAnimationFrame(tick);
           }
-          scan();
+          
+          video.addEventListener('loadeddata', () => {
+            tick();
+          });
         });
     });
   </script>
